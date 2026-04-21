@@ -1,3 +1,4 @@
+from datetime import datetime
 from clientes import Cliente, clientes
 from ciudad import ciudades
 from reserva import Reserva
@@ -45,7 +46,7 @@ def registrar_cliente():
     if c.dni == dni:
       if c.nombrecliente.lower() == nombrecliente.lower():
         print(f"\nCliente reconocido. ¡Bienvenido de nuevo, {c.nombrecliente}!")
-        return c
+        return c, True
       else:
         print("Ya existe un cliente con ese DNI pero diferente nombre.")
         return registrar_cliente()
@@ -58,7 +59,7 @@ def registrar_cliente():
   nuevo = Cliente(nombrecliente, dni)
   clientes.append(nuevo)
   print(f"\n¡Registro exitoso! Bienvenido, {nuevo.nombrecliente}.")
-  return nuevo
+  return nuevo, False
 
 #menu cliente existente
 
@@ -167,19 +168,40 @@ def seleccionar_habitacion(hotel):
     else:
       print("Opción inválida.")
 
-def seleccionar_noches():
+def seleccionar_fechas(cliente, hotel):
   while True:
-    noches = input("¿Cuántas noches desea hospedarse? ").strip()
-    if noches.isdigit():
-      noches = int(noches)
-      if noches <= 0:
-        print("El número de noches debe ser mayor a 0.")
-      elif noches > 30:
-        print("El máximo de noches es 30.")
-      else:
-        return noches
-    else:
-      print("Ingrese un número válido.")
+    print("\n--- SELECCIÓN DE FECHAS ---")
+    while True:
+      fecha_entrada_str = input("Ingrese fecha de check-in (DD/MM/AAAA): ").strip()
+      try:
+        fecha_entrada = datetime.strptime(fecha_entrada_str, "%d/%m/%Y")
+        if fecha_entrada < datetime.now().replace(hour=0, minute=0, second=0, microsecond=0):
+          print("La fecha de check-in no puede ser en el pasado.")
+        else:
+          break
+      except ValueError:
+        print("Formato inválido. Use DD/MM/AAAA.")
+    while True:
+      fecha_salida_str = input("Ingrese fecha de check-out (DD/MM/AAAA): ").strip()
+      try:
+        fecha_salida = datetime.strptime(fecha_salida_str, "%d/%m/%Y")
+        if fecha_salida <= fecha_entrada:
+          print("La fecha de check-out debe ser posterior al check-in.")
+        else:
+          break
+      except ValueError:
+        print("Formato inválido. Use DD/MM/AAAA.")
+    noches = (fecha_salida - fecha_entrada).days
+    conflicto = False
+    for r in cliente.reservas:
+      if r.hotel is hotel and r.fechas_se_interceptan(fecha_entrada, fecha_salida):
+        print(f"Ya tiene una reserva en este hotel del "
+              f"{r.fecha_entrada.strftime('%d/%m/%Y')} al {r.fecha_salida.strftime('%d/%m/%Y')}.")
+        print("Las fechas se interceptan. Elija otras fechas.")
+        conflicto = True
+        break
+    if not conflicto:
+      return fecha_entrada, fecha_salida, noches
 
 def preguntar_minibar(hotel):
   print(f"Minibar")
@@ -193,14 +215,16 @@ def preguntar_minibar(hotel):
 
 #reservas
 
-def confirmar_reserva_plan(cliente, ciudad, hotel, plan, tiene_minibar, costo_mini):
+def confirmar_reserva_plan(cliente, ciudad, hotel, plan, tiene_minibar, costo_mini, fecha_entrada, fecha_salida):
   costo_total = plan.costo + costo_mini
   reserva = Reserva(
     cliente, ciudad, hotel, plan,
     costototal=costo_total,
     habitacion=None,
     noches=plan.noches,
-    tiene_minibar=tiene_minibar
+    tiene_minibar=tiene_minibar,
+    fecha_entrada=fecha_entrada,
+    fecha_salida=fecha_salida
   )
   print("Reserva confirmada:")
   print(f"  Cliente  : {cliente.nombrecliente} (DNI: {cliente.dni})")
@@ -208,7 +232,7 @@ def confirmar_reserva_plan(cliente, ciudad, hotel, plan, tiene_minibar, costo_mi
   cliente.reservas.append(reserva)
   return reserva
 
-def confirmar_reserva_directa(cliente, ciudad, hotel, habitacion, noches, tiene_minibar, costo_mini):
+def confirmar_reserva_directa(cliente, ciudad, hotel, habitacion, noches, tiene_minibar, costo_mini, fecha_entrada, fecha_salida):
   costo_total = (habitacion.costonoche * noches) + costo_mini
   reserva = Reserva(
     cliente, ciudad, hotel,
@@ -216,7 +240,9 @@ def confirmar_reserva_directa(cliente, ciudad, hotel, habitacion, noches, tiene_
     costototal=costo_total,
     habitacion=habitacion,
     noches=noches,
-    tiene_minibar=tiene_minibar
+    tiene_minibar=tiene_minibar,
+    fecha_entrada=fecha_entrada,
+    fecha_salida=fecha_salida
   )
   print("\n=== RESERVA CONFIRMADA ===")
   print(f"  Cliente  : {cliente.nombrecliente} (DNI: {cliente.dni})")
@@ -228,32 +254,34 @@ def confirmar_reserva_directa(cliente, ciudad, hotel, habitacion, noches, tiene_
 
 def flujo_reserva(cliente):
   ciudad = seleccionar_ciudad()
-  hotel  = seleccionar_hotel(ciudad)
-  tipo   = seleccionar_tipo_reserva()
+  hotel = seleccionar_hotel(ciudad)
+  tipo = seleccionar_tipo_reserva()
 
   if tipo == "plan":
     plan = seleccionar_plan(hotel)
     if plan is None:
       return
+    fecha_entrada, fecha_salida, _ = seleccionar_fechas(cliente, hotel)
     tiene_minibar, costo_mini = preguntar_minibar(hotel)
-    confirmar_reserva_plan(cliente, ciudad, hotel, plan, tiene_minibar, costo_mini)
+    confirmar_reserva_plan(cliente, ciudad, hotel, plan, tiene_minibar, costo_mini, fecha_entrada, fecha_salida)
 
   elif tipo == "directa":
     habitacion = seleccionar_habitacion(hotel)
-    noches = seleccionar_noches()
+    fecha_entrada, fecha_salida, noches = seleccionar_fechas(cliente, hotel)
     tiene_minibar, costo_mini = preguntar_minibar(hotel)
-    confirmar_reserva_directa(cliente, ciudad, hotel, habitacion, noches, tiene_minibar, costo_mini)
+    confirmar_reserva_directa(cliente, ciudad, hotel, habitacion, noches, tiene_minibar, costo_mini, fecha_entrada, fecha_salida)
 
 
 def main():
-  cliente = registrar_cliente()
+  cliente, ya_existia = registrar_cliente()
 
   while True:
-    if cliente.reservas:
+    if ya_existia:
       hacer_reserva = menu_cliente(cliente)
       if not hacer_reserva:
         break
 
+    ya_existia = True
     flujo_reserva(cliente)
 
     if not preguntar_si_no("\n¿Desea hacer otra reserva? (s/n): "):
