@@ -273,19 +273,22 @@ def flujo_reserva(cliente):
 
 
 def main():
-  cliente, ya_existia = registrar_cliente()
-
   while True:
-    if ya_existia:
-      hacer_reserva = menu_cliente(cliente)
-      if not hacer_reserva:
+    cliente, ya_existia = registrar_cliente()
+
+    while True:
+      if ya_existia:
+        hacer_reserva = menu_cliente(cliente)
+        if not hacer_reserva:
+          break
+
+      ya_existia = True
+      flujo_reserva(cliente)
+
+      if not preguntar_si_no("\n¿Desea hacer otra reserva? (s/n): "):
+        print(f"\n¡Hasta luego, {cliente.nombrecliente}! Gracias por usar el sistema.")
         break
-
-    ya_existia = True
-    flujo_reserva(cliente)
-
-    if not preguntar_si_no("\n¿Desea hacer otra reserva? (s/n): "):
-      print(f"\n¡Hasta luego, {cliente.nombrecliente}! Gracias por usar el sistema.")
+    if not preguntar_si_no("\n¿Desea registrar o ingresar otro cliente? (s/n): "):
+      print("\nCerrando el sistema. ¡Hasta pronto!")
       break
-
 main()
